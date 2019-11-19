@@ -126,6 +126,7 @@ const byte PS_manual_red       = 10;
 const byte PS_manual_red_wait  = 15;
 const byte PS_manual_blue      = 20;
 const byte PS_manual_blue_wait = 25;
+const byte PS_manual_motor_off = 29;
 const byte PS_all_stop         = 30;
 
 const byte PS_idle             = 40;
@@ -189,7 +190,7 @@ const byte BS_GREEN = 4;
 // defined above
 void blue_pressed(const byte button_states) {
   program_state = PS_manual_blue;
-  valve_return  = PS_all_stop;
+  valve_return  = PS_idle;
   digitalWrite(green_led_pin, LOW);
   /*
   Serial.print("blue_pressed, states: ");
@@ -209,7 +210,7 @@ void blue_released(const byte button_states, const unsigned int press_duration) 
 
 void red_pressed(const byte button_states) {
   program_state = PS_manual_red;
-  valve_return  = PS_all_stop;
+  valve_return  = PS_idle;
   digitalWrite(green_led_pin, LOW);
   /*
   Serial.print("red_pressed, states: ");
@@ -292,6 +293,8 @@ void process_program_state() {
 
   static unsigned long delay_start = 0;
 
+  static unsigned long manual_start = 0;
+
   // washing machine states
   const byte EMS_INIT            = 0;
   const byte EMS_START           = 10;
@@ -318,15 +321,10 @@ void process_program_state() {
       // initialize estimated machine state
       est_machine_state = EMS_INIT;
       phase_start       = now;
-      // check if warm water is closed and open
-      // if that is the case
-      if (digitalRead(red_closed_pin) == LOW) {
-        Serial.println("hot water valve close. Opening...");
-        valve_return = PS_auto_wait;
-        program_state = PS_manual_red;
-      } else {
-        program_state = PS_auto_wait;
-      }
+      Serial.println("opening hot water valve...");        
+      valve_return = PS_auto_wait;
+      program_state = PS_manual_red;
+      
     } break;
 
     case PS_auto_wait : {
@@ -442,30 +440,38 @@ void process_program_state() {
     
     case PS_manual_red : {
       motor_forward();
+      manual_start = now;
       program_state = PS_manual_red_wait;
     } break;
 
     case PS_manual_red_wait : {
-      if (digitalRead(blue_closed_pin) == LOW) {
+      if ((digitalRead(blue_closed_pin) == LOW) || (safe_time_delta(now,manual_start) > 4800)) {
         PS_delay_duration = 200;
-        return_state = valve_return;
+        return_state = PS_manual_motor_off;
         program_state = PS_delay;
       }
     } break;
 
     case PS_manual_blue : {
       motor_backward();
+      manual_start = now;
       program_state = PS_manual_blue_wait;
     } break;
 
     case PS_manual_blue_wait : {
-      if (digitalRead(red_closed_pin) == LOW) {
+      if ((digitalRead(red_closed_pin) == LOW) || (safe_time_delta(now,manual_start) > 4800)) {
         PS_delay_duration = 200;
-        return_state = valve_return;
+        return_state = PS_manual_motor_off;
         program_state = PS_delay;
       }      
     } break;
 
+    case PS_manual_motor_off : {
+      motor_stop();
+      program_state = valve_return;      
+    } break;
+
+    // depricated state
     case PS_all_stop : {
       motor_stop();
       program_state = PS_idle;
@@ -481,7 +487,7 @@ void process_program_state() {
     } break;
 
     case PS_delay_wait : {
-      if (now - delay_start > PS_delay_duration) {
+      if (safe_time_delta(now,delay_start) > PS_delay_duration) {
         program_state = return_state;
       }
     } break;
