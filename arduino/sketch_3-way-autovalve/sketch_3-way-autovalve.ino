@@ -391,7 +391,8 @@ void process_program_state() {
         case EMS_1ST_RINSE_WASH : {
           // wait for second rinse flow to occur
           if (expecting_first_flow == false) {
-            rinse_duration = last_phase_duration;
+            rinse_duration   = last_phase_duration;
+            rinse_wash_start = now;
             Serial.print("1st rinse phase took ");
             Serial.print(last_phase_duration / 60000ul);
             Serial.println(" minutes.");
@@ -411,7 +412,6 @@ void process_program_state() {
             est_machine_state    = EMS_NTH_RINSE_WASH;
             expecting_first_flow = true;
             accumulated_flow     = 0;
-            rinse_wash_start     = now;
             Serial.println("Assuming to be in a rinse wash. Waiting for it to end or a further rinse fill to start.");
           }
         } break;
@@ -420,6 +420,7 @@ void process_program_state() {
           // wait for a further rinse flow to occur
           if (expecting_first_flow == false) {
             rinse_duration = last_phase_duration;
+            rinse_wash_start = now;
             Serial.print("the last rinse phase took ");
             Serial.print(last_phase_duration / 60000ul);
             Serial.println(" minutes.");
